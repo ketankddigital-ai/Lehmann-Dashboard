@@ -105,7 +105,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;margin-top:26px;line-
 
   <div class="kpis">
     <div class="kpi"><div class="lab">Total Leads</div><div class="val" id="kTotal">0</div><div class="dl flat" id="kTotalSub">in selected range</div></div>
-    <div class="kpi b2"><div class="lab">Last 30 Days</div><div class="val" id="kRecent">0</div><div class="dl" id="kRecentDelta">&nbsp;</div></div>
+    <div class="kpi b2"><div class="lab" id="kRecentLab">Last 30 Days</div><div class="val" id="kRecent">0</div><div class="dl" id="kRecentDelta">&nbsp;</div></div>
     <div class="kpi b3"><div class="lab">Top Service Request</div><div class="val" id="kService" style="font-size:20px">&mdash;</div><div class="dl flat" id="kServiceSub">most requested</div></div>
     <div class="kpi b4"><div class="lab">Reachable</div><div class="val" id="kReach">0%</div><div class="dl flat">phone number on file</div></div>
   </div>
@@ -183,15 +183,40 @@ function fmtWeek(iso){ const dt=d(iso); return dt.toLocaleDateString('en-US',{mo
 
 function renderKPIs(list){
   document.getElementById('kTotal').textContent=list.length;
-  // last 30d vs prev 30d (from full data, not range-limited, for a stable trend read)
-  const c30=new Date(TODAY); c30.setDate(c30.getDate()-30);
-  const c60=new Date(TODAY); c60.setDate(c60.getDate()-60);
-  const last30=DATA.filter(l=>d(l.iso)>=c30).length;
-  const prev30=DATA.filter(l=>d(l.iso)>=c60 && d(l.iso)<c30).length;
-  document.getElementById('kRecent').textContent=last30;
-  const dEl=document.getElementById('kRecentDelta');
-  if(prev30===0){ dEl.textContent='new inquiries'; dEl.className='dl flat'; }
-  else { const pct=Math.round((last30-prev30)/prev30*100); if(pct===0){ dEl.textContent='same as prior 30 days'; dEl.className='dl flat'; } else { dEl.textContent=(pct>0?'▲ +':'▼ ')+pct+'% vs prior 30 days'; dEl.className='dl '+(pct>0?'up':'down'); } }
+  // Second KPI card: range-aware. Month selected -> month-over-month; All time -> last 30 days.
+  var labEl=document.getElementById('kRecentLab');
+  var rEl=document.getElementById('kRecent');
+  var dEl=document.getElementById('kRecentDelta');
+  if(state.mode && /^\d{4}-\d{2}$/.test(state.mode)){
+    var y=parseInt(state.mode.slice(0,4),10), mo=parseInt(state.mode.slice(5,7),10);
+    var pm = (mo===1) ? (y-1)+'-12' : y+'-'+String(mo-1).padStart(2,'0');
+    var cur=DATA.filter(function(l){return l.iso.slice(0,7)===state.mode;}).length;
+    var prev=DATA.filter(function(l){return l.iso.slice(0,7)===pm;}).length;
+    if(prev===0){
+      labEl.textContent=labelMonth(state.mode)+' '+y;
+      rEl.textContent=cur;
+      dEl.textContent='first month tracked'; dEl.className='dl flat';
+    } else {
+      var pctM=Math.round((cur-prev)/prev*100);
+      labEl.textContent='vs Prior Month';
+      rEl.textContent=(pctM>0?'+':'')+pctM+'%';
+      dEl.textContent=cur+' in '+labelMonth(state.mode)+' vs '+prev+' in '+labelMonth(pm);
+      dEl.className='dl '+(pctM>0?'up':(pctM<0?'down':'flat'));
+    }
+  } else if(state.mode==='custom'){
+    labEl.textContent='In selected range';
+    rEl.textContent=list.length;
+    dEl.textContent='custom date range'; dEl.className='dl flat';
+  } else {
+    labEl.textContent='Last 30 Days';
+    var c30=new Date(TODAY); c30.setDate(c30.getDate()-30);
+    var c60=new Date(TODAY); c60.setDate(c60.getDate()-60);
+    var last30=DATA.filter(function(l){return d(l.iso)>=c30;}).length;
+    var prev30=DATA.filter(function(l){return d(l.iso)>=c60 && d(l.iso)<c30;}).length;
+    rEl.textContent=last30;
+    if(prev30===0){ dEl.textContent='new inquiries'; dEl.className='dl flat'; }
+    else { var pct=Math.round((last30-prev30)/prev30*100); if(pct===0){ dEl.textContent='same as prior 30 days'; dEl.className='dl flat'; } else { dEl.textContent=(pct>0?'▲ +':'▼ ')+pct+'% vs prior 30 days'; dEl.className='dl '+(pct>0?'up':'down'); } }
+  }
   // top specific service (exclude General Inquiry)
   const counts={}; list.forEach(l=>{ if(l.service!=='General Inquiry') counts[l.service]=(counts[l.service]||0)+1; });
   const top=Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
